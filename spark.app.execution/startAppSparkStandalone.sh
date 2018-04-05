@@ -1,5 +1,5 @@
 #!/bin/bash
-# Trigger the execution of the previously built ForensicAnalysis Java App!
+# Trigger the execution of the ForensicAnalysis Java App!
 # Author: jobusam
 # Work: Masterthesis
 
@@ -17,7 +17,7 @@ SPARK_STANDALONE_INSTANCE_URI="spark://johannes-development:7077"
 
 if [ ! -z "$1" ] ; then
 	echo "Use Input Directory = $1"
-	SPARK_APP_INPUT_DIR="$1"	
+	SPARK_APP_INPUT_DIR="$1"
 fi
 
 if [ ! -z "$2" ] ; then
