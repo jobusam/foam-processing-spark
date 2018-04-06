@@ -22,7 +22,7 @@ DRIVER_MEM="1152M" # 1152 = 1536M (yarn.scheduler.minimum-allocation-mb)  - 384 
 
 EXECUTOR_CORES="1"
 EXECUTOR_MEM="1152M" # see calculation above
-------------------------------------------
+#------------------------------------------
 
 #Application params
 SPARK_APP_LOCATION="/home/johannes/git/foam-processing-spark/de.foam.processing.spark/target/processing.spark-0.0.1-SNAPSHOT.jar"
