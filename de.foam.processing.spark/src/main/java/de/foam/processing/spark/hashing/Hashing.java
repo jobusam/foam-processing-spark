@@ -20,7 +20,7 @@ public class Hashing {
 	/**
 	 * Calculate File Hashes from given files.
 	 * 
-	 * @param filesWithContent
+	 * @param filesWithBinContent
 	 *            contains filePath and a {@link PortableDataStream} that can be
 	 *            read to get the file content
 	 * @return a {@link JavaPairRDD} that contains the hashsum (SHA-512) as key and
