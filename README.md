@@ -8,7 +8,7 @@ Following functionality is implemented:
 Functionality will be improved in future ;).
 
 ## Build Forensic App
-Checkout the Maven Project written java ([de.foam.processing.spark](de.foam.processing.spark)).
+Checkout the Maven Project written in Java ([de.foam.processing.spark](de.foam.processing.spark)).
 
 Install Maven and Java JDK 1.8.0 (optional)
 ```
