@@ -1,24 +1,14 @@
 package de.foam.processing.spark;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Objects;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.spark.JavaHBaseContext;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import de.foam.processing.spark.datamodel.Entry;
-import de.foam.processing.spark.datamodel.Metadata;
+import de.foam.processing.spark.hbase.Content;
+import de.foam.processing.spark.hbase.HbaseRead;
 
 /**
  * This example reads the first 5 rows of the HBASE table "forensicData" and
@@ -52,73 +42,24 @@ final public class ForensicAnalysis {
 	public static void main(String[] args) {
 		SparkConf sparkConf = new SparkConf().setAppName("ForensicAnalysis");
 		JavaSparkContext jsc = new JavaSparkContext(sparkConf);
-
-		Configuration conf = HBaseConfiguration.create();
-		// HBASE/Zookeeper instance properties on localhost!
-		conf.set("hbase.zookeeper.quorum", "localhost");
-		conf.set("hbase.zookeeper.property.clientPort", "2181");
-		JavaHBaseContext hbaseContext = new JavaHBaseContext(jsc, conf);
 		try {
-			List<byte[]> list = new ArrayList<>(5);
-			list.add(Bytes.toBytes("row0"));
-			list.add(Bytes.toBytes("row1"));
-			list.add(Bytes.toBytes("row2"));
-			list.add(Bytes.toBytes("row3"));
-			list.add(Bytes.toBytes("row4"));
-			// Original JavaRDD with data to iterate over
-			JavaRDD<byte[]> rdd = jsc.parallelize(list);
+			HbaseRead.getForensicMetadata(jsc).collect().stream()
+					.forEach(e -> LOGGER.info("Entry = {} and relativePath = {} and file size = {}.", e.getId(),
+							e.getRelativeFilePath(), e.getFileSize()));
 
-			// batch size of how many gets to retrieve in a single fetch
-			int batchSize = 2;
-			// A simple abstraction over the HBaseContext.mapPartition method.
-			// It allow addition support for a user to take a JavaRDD and generates a new
-			// RDD based on Gets and the results they bring back from HBase
-			JavaRDD<Entry> bulkGet = hbaseContext.bulkGet(TableName.valueOf("forensicData"), batchSize, rdd,
-					new GetFunction(), new MetadataFunction());
-			// print result
-			bulkGet.collect().stream().forEach(e -> LOGGER.info("Entry = {} and relativePath = {} and file size = {}.",
-					e.getRowID(), e.getMetadata().getRelativeFilePath(), e.getMetadata().getFileSize()));
+			HbaseRead.getForensicFileContent(jsc).filter(Objects::nonNull)
+					// Keep in mind the data type Content is not serializable due to the containing
+					// ByteBuffer. Thats the reason why the content's data will converted in single
+					// string message BEFORE the collect() method is called. Because after the
+					// collect everything must be available on the driver!
+					.map((Content e) -> String.format(
+							"Entry = %s with relativePath = %s and hdfsPath = %s and hbase content size = %d.",
+							e.getId(), e.getRelativeFilePath(), e.getHdfsFilePath(),
+							e.getContent() != null ? e.getContent().capacity() : -1))
+					.collect().stream().forEach(e -> LOGGER.info(e));
 		} finally {
 			jsc.stop();
 		}
 	}
 
-	// Function to convert a value in the JavaRDD to a HBase Get
-	public static class GetFunction implements Function<byte[], Get> {
-		private static final long serialVersionUID = 1L;
-
-		public Get call(byte[] v) throws Exception {
-			// Get only metadata!
-			return new Get(v).addFamily(Bytes.toBytes("metadata"));
-		}
-	}
-
-	// This will convert the HBase Result object to what ever the user wants to put
-	// in the resulting JavaRDD
-	public static class MetadataFunction implements Function<Result, Entry> {
-		private static final long serialVersionUID = 1L;
-
-		public Entry call(Result result) throws Exception {
-			Metadata metadata = new Metadata(
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("relativeFilePath"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("fileType"))),
-					convertFileSize(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("fileSize"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("owner"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("group"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("permissions"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("lastModified"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("lastChanged"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("lastAccessed"))),
-					Bytes.toString(result.getValue(Bytes.toBytes("metadata"), Bytes.toBytes("created"))));
-			return new Entry(Bytes.toString(result.getRow()), metadata);
-		}
-
-		long convertFileSize(byte[] binaryFileSize) {
-			LOGGER.error("FileSize = {}", binaryFileSize);
-			if (binaryFileSize != null && binaryFileSize.length > 0) {
-				return Long.valueOf(Bytes.toString(binaryFileSize));
-			}
-			return 0L;
-		}
-	}
 }

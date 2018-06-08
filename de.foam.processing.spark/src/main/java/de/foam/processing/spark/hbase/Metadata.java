@@ -1,4 +1,4 @@
-package de.foam.processing.spark.datamodel;
+package de.foam.processing.spark.hbase;
 
 import java.io.Serializable;
 
@@ -11,6 +11,7 @@ import java.io.Serializable;
  */
 public class Metadata implements Serializable {
 	private static final long serialVersionUID = 1L;
+	private String id;
 	private String relativeFilePath;
 	private String fileType;
 	private long fileSize;
@@ -22,8 +23,9 @@ public class Metadata implements Serializable {
 	private String lastAccessed;
 	private String created;
 
-	public Metadata(String relativeFilePath, String fileType, long fileSize, String owner, String group,
+	public Metadata(String id, String relativeFilePath, String fileType, long fileSize, String owner, String group,
 			String permissions, String lastModified, String lastChanged, String lastAccessed, String created) {
+		this.id = id;
 		this.relativeFilePath = relativeFilePath;
 		this.fileType = fileType;
 		this.fileSize = fileSize;
@@ -34,6 +36,10 @@ public class Metadata implements Serializable {
 		this.lastChanged = lastChanged;
 		this.lastAccessed = lastAccessed;
 		this.created = created;
+	}
+
+	public String getId() {
+		return id;
 	}
 
 	public String getRelativeFilePath() {
