@@ -2,7 +2,6 @@ package de.foam.processing.spark;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Objects;
 import java.util.Optional;
 
 import org.apache.spark.SparkConf;
@@ -46,16 +45,16 @@ final public class ForensicAnalysis {
 					.forEach(e -> LOGGER.info("Entry = {} and relativePath = {} and file size =	{}.", e.getId(),
 							e.getRelativeFilePath(), e.getFileSize()));
 
-			hbr.getForensicFileContent(jsc).filter(Objects::nonNull)
-					// Keep in mind the data type Content is not serializable due to the containing
-					// ByteBuffer. Thats the reason why the content's data will converted in single
-					// string message BEFORE the collect() method is called. Because after the
-					// collect everything must be available on the driver!
+			hbr.getForensicFileContent(jsc)
 					.map((Content e) -> String.format(
 							"Entry = %s with relativePath = %s and hdfsPath = %s and hbase content size =%d.",
 							e.getId(), e.getRelativeFilePath(), e.getHdfsFilePath(),
 							e.getContent() != null ? e.getContent().capacity() : -1))
-					.collect().stream().forEach(e -> LOGGER.info(e));
+					// Keep in mind the data type Content is not serializable due to the containing
+					// ByteBuffer. Thats the reason why the content's data will converted in single
+					// string message BEFORE the collect() method is called. Because after the
+					// collect everything must be available on the driver!
+					.take(20).stream().forEach(e -> LOGGER.info(e));
 		} finally {
 			jsc.stop();
 		}
