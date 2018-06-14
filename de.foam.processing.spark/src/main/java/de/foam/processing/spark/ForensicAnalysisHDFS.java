@@ -12,8 +12,11 @@ import org.slf4j.LoggerFactory;
  * executing forensic analysis jobs.
  * 
  * @author jobusam
- *
+ * @deprecated use {@link ForensicAnalysis} instead! This version is only
+ *             available to test raw hdfs throughput and compare results with
+ *             new HDFS-HBASE persistence approach.
  */
+@Deprecated
 public class ForensicAnalysisHDFS {
 
 	private static String dataDir;

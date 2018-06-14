@@ -22,6 +22,26 @@
 					<target>1.8</target>
 				</configuration>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<version>3.1.0</version>
+				<configuration>
+					<descriptorRefs>
+						<descriptorRef>jar-with-dependencies</descriptorRef>
+					</descriptorRefs>
+
+				</configuration>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
 		</plugins>
 	</build>
 
@@ -45,7 +65,55 @@
 			<groupId>org.apache.hbase</groupId>
 			<artifactId>hbase-spark</artifactId>
 			<version>3.0.0-SNAPSHOT</version>
-			<scope>provided</scope>
 		</dependency>
 	</dependencies>
+
+	<profiles>
+		<!-- Following profile will build the proccesing app for execution on Hortonworks 
+			HDP 2.6.7 cluster -->
+		<profile>
+			<id>buildForHDP2.6.3</id>
+			<repositories>
+				<!-- Following external repos are necessary for getting hbase-spark and 
+					dependencies. See also https://docs.hortonworks.com/HDPDocuments/HDP2/HDP-2.6.4/ 
+					bk_command-line-installation/content/download_hdp_maven_artifacts.html -->
+				<repository>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>true</enabled>
+					</snapshots>
+					<id>hortonworks.releases</id>
+					<name>Hortonworks HDP</name>
+					<url>http://repo.hortonworks.com/content/repositories/releases</url>
+				</repository>
+				<repository>
+					<releases>
+						<enabled>true</enabled>
+					</releases>
+					<snapshots>
+						<enabled>true</enabled>
+					</snapshots>
+					<id>hortonworks.other</id>
+					<name>Hortonworks Other Dependencies</name>
+					<url>http://repo.hortonworks.com/content/groups/public</url>
+				</repository>
+			</repositories>
+			<dependencies>
+				<dependency>
+					<groupId>org.apache.hbase</groupId>
+					<artifactId>hbase-spark</artifactId>
+					<version>1.1.2.2.6.3.9-2</version>
+				</dependency>
+				<!-- Check if following dependency is really necessary! -->
+				<dependency>
+					<groupId>org.apache.zookeeper</groupId>
+					<artifactId>zookeeper</artifactId>
+					<version>3.4.6.2.3.4.12-2</version>
+				</dependency>
+			</dependencies>
+		</profile>
+	</profiles>
+
 </project>
