@@ -10,12 +10,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import de.foam.processing.spark.hbase.Content;
-import de.foam.processing.spark.hbase.HbaseRead;
+import de.foam.processing.spark.hbase.HbaseConnector;
 
 /**
  * The {@link ForensicAnalysis} class reads data from HBASE and prints some
  * results.<br>
- * TODO: Implement calculation of file content hashes<br>
+ * TODO: Implement calculation of file content hashes (almost done!)<br>
+ * TODO: Determine duplicate files<br>
  * TODO: Analyse File Mime-Type of files<br>
  * TODO: Extract strings from file content for full text search / indexing<br>
  * <br>
@@ -37,27 +38,41 @@ final public class ForensicAnalysis {
 		SparkConf sparkConf = new SparkConf().setAppName("ForensicAnalysis");
 		JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 		try {
-			HbaseRead hbr = new HbaseRead(jsc, hbaseConfigFile);
-			long count = hbr.getForensicMetadata().count();
-			LOGGER.info("Count = {}", count);
-
-			hbr.getForensicMetadata().take(10).stream()
-					.forEach(e -> LOGGER.info("Entry = {} and relativePath = {} and file size =	{}.", e.getId(),
-							e.getRelativeFilePath(), e.getFileSize()));
-
-			hbr.getForensicFileContent(jsc)
-					.map((Content e) -> String.format(
-							"Entry = %s with relativePath = %s and hdfsPath = %s and hbase content size =%d.",
-							e.getId(), e.getRelativeFilePath(), e.getHdfsFilePath(),
-							e.getContent() != null ? e.getContent().capacity() : -1))
-					// Keep in mind the data type Content is not serializable due to the containing
-					// ByteBuffer. Thats the reason why the content's data will converted in single
-					// string message BEFORE the collect() method is called. Because after the
-					// collect everything must be available on the driver!
-					.take(20).stream().forEach(e -> LOGGER.info(e));
+			HbaseConnector hbc = new HbaseConnector(jsc, hbaseConfigFile);
+			// FIXME: Make directory configurable!
+			AnalysisJobs.calculateHashsums(jsc, hbc, "/data/");
 		} finally {
 			jsc.stop();
 		}
+	}
+
+	/**
+	 * Additional testing calls -> NON-Productive!
+	 */
+	private void testCalls(HbaseConnector hbc) {
+
+		LOGGER.info("Small files in HBASE = {}", hbc.getSmallFileContent().count());
+		hbc.getSmallFileContent().mapValues(bb -> bb.capacity()).take(10)
+				.forEach(p -> LOGGER.info("Row {} : fileSize = {}", p._1, p._2));
+
+		long count = hbc.getForensicMetadata().count();
+		LOGGER.info("Count = {}", count);
+
+		hbc.getForensicMetadata().take(10).stream()
+				.forEach(e -> LOGGER.info("Entry = {} and relativePath = {} and file size = {}.", e.getId(),
+						e.getRelativeFilePath(), e.getFileSize()));
+
+		hbc.getForensicFileContent() // -
+				.filter(c -> c.getHdfsFilePath() != null && !c.getHdfsFilePath().isEmpty())
+				.map((Content e) -> String.format(
+						"Entry = %s with relativePath = %s and hdfsPath = %s and hbase content size =%d.", e.getId(),
+						e.getRelativeFilePath(), e.getHdfsFilePath(),
+						e.getContent() != null ? e.getContent().capacity() : -1))
+				// Keep in mind the data type Content is not serializable due to the containing
+				// ByteBuffer. Thats the reason why the content's data will converted in single
+				// string message BEFORE the collect() method is called. Because after the
+				// collect everything must be available on the driver!
+				.take(20).stream().forEach(e -> LOGGER.info(e));
 	}
 
 	/**

@@ -1,34 +1,41 @@
 package de.foam.processing.spark.hbase;
 
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.util.Optional;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueExcludeFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.spark.JavaHBaseContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import scala.Tuple2;
+
 /**
- * This class creates RDDs based on the content persisted in HBASE. The data
- * model in HBASE is derived from foam-data-import project.<br>
+ * This class creates RDDs based on the content persisted in HBASE and writes
+ * data to HBASE. The data model in HBASE is derived from foam-data-import
+ * project.<br>
  * 
  * @author jobusam
  * 
  * @see <a href=
  *      "https://github.com/jobusam/foam-data-import">foam-data-import</a>
  */
-public class HbaseRead {
-	private static final Logger LOGGER = LoggerFactory.getLogger(HbaseRead.class);
+public class HbaseConnector {
+	private static final Logger LOGGER = LoggerFactory.getLogger(HbaseConnector.class);
 
 	// local Standalone config to access hbase
 	private static final String HBASE_STANDALONE_HOST = "localhost";
@@ -49,6 +56,7 @@ public class HbaseRead {
 	private static final byte[] C_LAST_CHANGED = Bytes.toBytes("lastChanged");
 	private static final byte[] C_LAST_ACCESSED = Bytes.toBytes("lastAccessed");
 	private static final byte[] C_CREATED = Bytes.toBytes("created");
+	private static final byte[] C_FILE_HASH = Bytes.toBytes("fileHash");
 
 	// cf content and including columns
 	private static final byte[] CF_CONTENT = Bytes.toBytes("content");
@@ -65,7 +73,7 @@ public class HbaseRead {
 	 * @param hbaseConfigFile
 	 *            Optional<Path> to hbase-site.xml. Used to access HBASE.
 	 */
-	public HbaseRead(JavaSparkContext jsc, Optional<Path> hbaseConfigFile) {
+	public HbaseConnector(JavaSparkContext jsc, Optional<Path> hbaseConfigFile) {
 		Configuration conf = HBaseConfiguration.create();
 		if (hbaseConfigFile.isPresent()) {
 			LOGGER.info("Use configuration file {} to connect to HBASE", hbaseConfigFile.get());
@@ -115,16 +123,25 @@ public class HbaseRead {
 
 	/**
 	 * Create a {@link JavaRDD} that contains a {@link Content} object for every
-	 * entry in HBASE Table "forensicData".
+	 * entry in HBASE Table "forensicData". This method reads several values from
+	 * different cells...
+	 * 
+	 * @return the content contains for the entry either a raw {@link ByteBuffer}
+	 *         (small files) or an hdfs file path! Additionally the original file
+	 *         path and the row id are included.
 	 */
-	public JavaRDD<Content> getForensicFileContent(JavaSparkContext jsc) {
+	public JavaRDD<Content> getForensicFileContent() {
+		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
+		SingleColumnValueExcludeFilter filter = new SingleColumnValueExcludeFilter(CF_METADATA, C_FILE_TYPE, // -
+				CompareFilter.CompareOp.EQUAL, //// for HBASE 2.0.0 and later CompareOperator.EQUAL is preferred!
+				Bytes.toBytes("DATA_FILE"));
+
 		Scan scans = new Scan().addFamily(CF_CONTENT)
 				// request required columns from metadata cf
 				.addColumn(CF_METADATA, C_FILE_PATH)// .addColumn(CF_METADATA, C_FILE_TYPE)
 				// request only data files (no directories or links)
 				// and exclude the file type column itself (performance optimization)
-				.setFilter(new SingleColumnValueExcludeFilter(CF_METADATA, C_FILE_TYPE, CompareOperator.EQUAL,
-						Bytes.toBytes("DATA_FILE")));
+				.setFilter(filter);
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(resultToContent);
 	}
 
@@ -134,4 +151,77 @@ public class HbaseRead {
 				Bytes.toString(result.getValue(CF_CONTENT, C_HDFS_FILE_PATH)),
 				result.getValueAsByteBuffer(CF_CONTENT, C_FILE_CONTENT));
 	};
+
+	/**
+	 * Create a {@link JavaRDD} that reads the values from the column
+	 * content:fileContent within the HBASE table "forensicData". Keep in mind large
+	 * files are directly saved in HDFS and won't be requested by this method. To
+	 * get the large files see {@link #getLargeFileContent()}.<br>
+	 * CAUTION: This method retrieves only files with non-empty content. Data files
+	 * with empty content are skipped!
+	 * 
+	 * @return {@link JavaPairRDD}<br>
+	 *         val_1 = contains the row ID of the HBASE entry<br>
+	 *         val_2 = file content of small files as {@link ByteBuffer}.
+	 * 
+	 */
+	public JavaPairRDD<String, ByteBuffer> getSmallFileContent() {
+		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
+		SingleColumnValueFilter filter = new SingleColumnValueFilter(CF_CONTENT, C_FILE_CONTENT, // -
+				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
+				Bytes.toBytes(""));
+
+		// request only files that are persisted in hbase (hdfsFilePath != null)
+		Scan scans = new Scan().addColumn(CF_CONTENT, C_FILE_CONTENT).setFilter(filter);
+
+		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
+			return new Tuple2<String, ByteBuffer>(Bytes.toString(result.getRow()),
+					result.getValueAsByteBuffer(CF_CONTENT, C_FILE_CONTENT));
+		}).mapToPair(t -> t);
+	}
+
+	/**
+	 * Following method is useless! Because it's not possible to access the file
+	 * content of a given file path within any executor without using the spark
+	 * context!
+	 * 
+	 * Create a {@link JavaRDD} that reads the values from the column
+	 * content:hdfsFilePath within the HBASE table "forensicData". This values are
+	 * file paths refering to the original large file content in HDFS. This file
+	 * content will be returned. (See also {@link #getSmallFileContent() to request
+	 * files that are directly saved in HBASE)
+	 * 
+	 * @return {@link JavaPairRDD}<br>
+	 *         val_1 = contains the row ID of the HBASE entry<br>
+	 *         val_2 = HDFS file path {@link org.apache.hadoop.fs.Path}.
+	 */
+	public JavaPairRDD<String, org.apache.hadoop.fs.Path> getLargeFileContent() {
+		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
+		SingleColumnValueFilter filter = new SingleColumnValueFilter(CF_CONTENT, C_HDFS_FILE_PATH, // -
+				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
+				Bytes.toBytes(""));
+
+		// request only files that are persisted in hbase (hdfsFilePath != null)
+		Scan scans = new Scan().addColumn(CF_CONTENT, C_HDFS_FILE_PATH).setFilter(filter);
+
+		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
+			return new Tuple2<String, org.apache.hadoop.fs.Path>(Bytes.toString(result.getRow()),
+					new org.apache.hadoop.fs.Path(Bytes.toString(result.getValue(CF_CONTENT, C_HDFS_FILE_PATH))));
+		}).mapToPair(t -> t);
+	}
+
+	/**
+	 * Write file hashes to HBASE. Put the values into table "forensicMetadata" and
+	 * column "metadata:fileHash"
+	 * 
+	 * @param {@link
+	 * 			JavaPairRDD}<br>
+	 *            val_1 = contains the row ID of the HBASE entry<br>
+	 *            val_2 = file hash.
+	 */
+	public void putHashesToHbase(JavaPairRDD<String, byte[]> fileHashes) {
+		hbaseContext.bulkPut(JavaPairRDD.toRDD(fileHashes).toJavaRDD(), HBASE_FORENSIC_TABLE, (fileHash) -> {
+			return new Put(Bytes.toBytes(fileHash._1)).addColumn(CF_METADATA, C_FILE_HASH, fileHash._2);
+		});
+	}
 }
