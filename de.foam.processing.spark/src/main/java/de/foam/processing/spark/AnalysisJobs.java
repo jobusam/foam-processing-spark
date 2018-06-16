@@ -1,5 +1,6 @@
 package de.foam.processing.spark;
 
+import org.apache.hadoop.fs.Path;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.slf4j.Logger;
@@ -10,6 +11,7 @@ import de.foam.processing.spark.common.FindDuplicates;
 import de.foam.processing.spark.hashing.Hashing;
 import de.foam.processing.spark.hbase.HbaseConnector;
 import de.foam.processing.spark.metadata.FileMetadata;
+import scala.Tuple2;
 
 /**
  * Contains analysis jobs that could be executed on Spark
@@ -43,8 +45,12 @@ public class AnalysisJobs {
 		// looks like there is no method. So the binaryFiles() method is only available
 		// on driver. But otherwise it does make sense, because loading an hdfs on any
 		// predefined executor doesn't ensures that this file is really located on the
-		// same cluster node (see data locality)
+		// same cluster node (see data locality).
+		// Keep in mind binaryFiles() returns the full file path. The file name itself
+		// represents the rowKey in HBASE (see foam-data-import project)
 		JavaPairRDD<String, byte[]> largeFileHashes = executionContext.binaryFiles(largeDataHdfsDir) // -
+				// retrieve row id from hdfs file name
+				.mapToPair(e -> new Tuple2<>(new Path(e._1).getName(), e._2)) // -
 				.mapValues(Hashing::hashFiles);
 		// .mapValues(Hashing::mapToHexString)
 		// .take(5).forEach(h -> LOGGER.info("Large File {} hash = {}", h._1, h._2));
@@ -52,22 +58,31 @@ public class AnalysisJobs {
 	}
 
 	/**
-	 * Find duplicate files dependent on their hashsum and persist the result as
-	 * text file in readable format. FIXME: refactor and retrieve data from HBASE!
+	 * Find duplicate files dependent on the file hashes persisted in HBASE.
 	 * 
 	 * @param executionContext
+	 * @param hbc
 	 */
-	static void findDuplicateFiles(JavaSparkContext executionContext, String dataDir, String outputDir) {
+	static void findDuplicateFiles(JavaSparkContext executionContext, HbaseConnector hbc) {
+		LOGGER.info("Search for duplicate files:");
+		FindDuplicates.filterForDuplicates(hbc.getFileHashAndPath()) // -
+				.take(20).forEach(r -> LOGGER.info("Duplicates: {}", r._2()));
+	}
+
+	/**
+	 * Find duplicate files dependent on their hashsum and persist the result as
+	 * text file in readable format.
+	 * 
+	 * @deprecated use {@link FindDuplicates} instead
+	 * @param executionContext
+	 */
+	static void findDuplicateFilesOnHDFSFolder(JavaSparkContext executionContext, String dataDir, String outputDir) {
 		JavaPairRDD<String, String> hashesWithFileNames = executionContext.binaryFiles(dataDir)
 				.mapValues(Hashing::hashFiles) // -
 				.mapValues(Hashing::mapToHexString);
-		try {
-			JavaPairRDD<String, String> results = FindDuplicates.filterForDuplicates(hashesWithFileNames);
-			// printResults(results);
-			FileOutput.saveResults(results, outputDir);
-		} catch (Exception e) {
-			LOGGER.error("Finding duplicated files on input {} failed!", dataDir, e);
-		}
+		JavaPairRDD<String, String> results = FindDuplicates.filterForDuplicates(hashesWithFileNames);
+		// printResults(results);
+		FileOutput.saveResults(results, outputDir);
 	}
 
 	/**

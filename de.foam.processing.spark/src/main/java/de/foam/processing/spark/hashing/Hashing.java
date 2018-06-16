@@ -62,6 +62,9 @@ public class Hashing {
 	 * @return
 	 */
 	public static String mapToHexString(byte[] hash) {
+		if (hash == null) {
+			return null;
+		}
 		StringBuffer hexString = new StringBuffer();
 		for (int i = 0; i < hash.length; i++) {
 			String hex = Integer.toHexString(0xff & hash[i]);

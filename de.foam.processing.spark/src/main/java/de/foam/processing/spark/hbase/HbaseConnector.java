@@ -22,7 +22,9 @@ import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import de.foam.processing.spark.hashing.Hashing;
 import scala.Tuple2;
+import scala.Tuple3;
 
 /**
  * This class creates RDDs based on the content persisted in HBASE and writes
@@ -33,6 +35,9 @@ import scala.Tuple2;
  * 
  * @see <a href=
  *      "https://github.com/jobusam/foam-data-import">foam-data-import</a>
+ * @see <a href=
+ *      "https://github.com/apache/hbase/blob/master/hbase-spark/src/main/java/org/apache/hadoop/hbase/spark/example/hbasecontext/JavaHBaseBulkGetExample.java">JavaHBaseBulkGetExample.java</a>
+ * 
  */
 public class HbaseConnector {
 	private static final Logger LOGGER = LoggerFactory.getLogger(HbaseConnector.class);
@@ -131,17 +136,13 @@ public class HbaseConnector {
 	 *         path and the row id are included.
 	 */
 	public JavaRDD<Content> getForensicFileContent() {
-		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
-		SingleColumnValueExcludeFilter filter = new SingleColumnValueExcludeFilter(CF_METADATA, C_FILE_TYPE, // -
-				CompareFilter.CompareOp.EQUAL, //// for HBASE 2.0.0 and later CompareOperator.EQUAL is preferred!
-				Bytes.toBytes("DATA_FILE"));
 
 		Scan scans = new Scan().addFamily(CF_CONTENT)
 				// request required columns from metadata cf
 				.addColumn(CF_METADATA, C_FILE_PATH)// .addColumn(CF_METADATA, C_FILE_TYPE)
 				// request only data files (no directories or links)
 				// and exclude the file type column itself (performance optimization)
-				.setFilter(filter);
+				.setFilter(dataFilesOnly());
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(resultToContent);
 	}
 
@@ -166,13 +167,9 @@ public class HbaseConnector {
 	 * 
 	 */
 	public JavaPairRDD<String, ByteBuffer> getSmallFileContent() {
-		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
-		SingleColumnValueFilter filter = new SingleColumnValueFilter(CF_CONTENT, C_FILE_CONTENT, // -
-				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
-				Bytes.toBytes(""));
-
 		// request only files that are persisted in hbase (hdfsFilePath != null)
-		Scan scans = new Scan().addColumn(CF_CONTENT, C_FILE_CONTENT).setFilter(filter);
+		Scan scans = new Scan().addColumn(CF_CONTENT, C_FILE_CONTENT)
+				.setFilter(valueIsNotNull(CF_CONTENT, C_FILE_CONTENT));
 
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
 			return new Tuple2<String, ByteBuffer>(Bytes.toString(result.getRow()),
@@ -196,18 +193,40 @@ public class HbaseConnector {
 	 *         val_2 = HDFS file path {@link org.apache.hadoop.fs.Path}.
 	 */
 	public JavaPairRDD<String, org.apache.hadoop.fs.Path> getLargeFileContent() {
-		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
-		SingleColumnValueFilter filter = new SingleColumnValueFilter(CF_CONTENT, C_HDFS_FILE_PATH, // -
-				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
-				Bytes.toBytes(""));
 
 		// request only files that are persisted in hbase (hdfsFilePath != null)
-		Scan scans = new Scan().addColumn(CF_CONTENT, C_HDFS_FILE_PATH).setFilter(filter);
+		Scan scans = new Scan().addColumn(CF_CONTENT, C_HDFS_FILE_PATH)
+				.setFilter(valueIsNotNull(CF_CONTENT, C_HDFS_FILE_PATH));
 
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
 			return new Tuple2<String, org.apache.hadoop.fs.Path>(Bytes.toString(result.getRow()),
 					new org.apache.hadoop.fs.Path(Bytes.toString(result.getValue(CF_CONTENT, C_HDFS_FILE_PATH))));
 		}).mapToPair(t -> t);
+	}
+
+	/**
+	 * Create a {@link JavaRDD} that reads the file hashes and file paths from
+	 * HBASE. Use table "forensicData". Enties without hash will be skipped! So
+	 * ensure that the hashes are already persisted in HBASE
+	 * 
+	 * @return {@link JavaRDD}<br>
+	 *         val_1 = contains the row ID of the the table "forensicData"<br>
+	 *         val_2 = contains the relativeFilePath of the file (column =
+	 *         metadata:relativeFilePath) val_3 = contains the file hash of the file
+	 *         (column = metadata:fileHash).
+	 * 
+	 */
+	public JavaRDD<Tuple3<String, String, String>> getFileHashAndPath() {
+		// request only files that have any hash value
+		Scan scans = new Scan().addFamily(CF_METADATA)
+				// .addColumn(CF_METADATA, C_FILE_PATH).addColumn(CF_METADATA, C_FILE_HASH)
+				.setFilter(valueIsNotNull(CF_METADATA, C_FILE_HASH));
+
+		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
+			return new Tuple3<String, String, String>(Bytes.toString(result.getRow()),
+					Bytes.toString(result.getValue(CF_METADATA, C_FILE_PATH)),
+					Hashing.mapToHexString(result.getValue(CF_METADATA, C_FILE_HASH)));
+		});
 	}
 
 	/**
@@ -223,5 +242,34 @@ public class HbaseConnector {
 		hbaseContext.bulkPut(JavaPairRDD.toRDD(fileHashes).toJavaRDD(), HBASE_FORENSIC_TABLE, (fileHash) -> {
 			return new Put(Bytes.toBytes(fileHash._1)).addColumn(CF_METADATA, C_FILE_HASH, fileHash._2);
 		});
+	}
+
+	/**
+	 * Create a filter object that skips the whole row, if the specified column
+	 * value is empty.
+	 */
+	private static SingleColumnValueFilter valueIsNotNull(byte[] family, byte[] qualifier) {
+		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
+		SingleColumnValueFilter filter = new SingleColumnValueFilter(family, qualifier, // -
+				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
+				Bytes.toBytes(""));
+		// Otherwise rows without the specified column will emitted!
+		filter.setFilterIfMissing(true);
+		return filter;
+	}
+
+	/**
+	 * Filter the rows and retrieve only data files! (Directories, Symbolic Links
+	 * and Other Files will skipped! If the row doesn't contain the column
+	 * "metadata:fileType" it will be also skipped!
+	 */
+	private static SingleColumnValueFilter dataFilesOnly() {
+		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
+		SingleColumnValueExcludeFilter filter = new SingleColumnValueExcludeFilter(CF_METADATA, C_FILE_TYPE, // -
+				CompareFilter.CompareOp.EQUAL, //// for HBASE 2.0.0 and later CompareOperator.EQUAL is preferred!
+				Bytes.toBytes("DATA_FILE"));
+		// Otherwise rows without the specified column will emitted!
+		filter.setFilterIfMissing(true);
+		return filter;
 	}
 }

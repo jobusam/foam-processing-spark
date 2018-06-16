@@ -26,9 +26,6 @@ import de.foam.processing.spark.hbase.HbaseConnector;
  * 
  * @see <a href=
  *      "https://github.com/jobusam/foam-data-import">foam-data-import</a>
- * @see <a href=
- *      "https://github.com/apache/hbase/blob/master/hbase-spark/src/main/java/org/apache/hadoop/hbase/spark/example/hbasecontext/JavaHBaseBulkGetExample.java">JavaHBaseBulkGetExample.java</a>
- * 
  */
 final public class ForensicAnalysis {
 	private static final Logger LOGGER = LoggerFactory.getLogger(ForensicAnalysis.class);
@@ -41,6 +38,7 @@ final public class ForensicAnalysis {
 			HbaseConnector hbc = new HbaseConnector(jsc, hbaseConfigFile);
 			// FIXME: Make directory configurable!
 			AnalysisJobs.calculateHashsums(jsc, hbc, "/data/");
+			AnalysisJobs.findDuplicateFiles(jsc, hbc);
 		} finally {
 			jsc.stop();
 		}

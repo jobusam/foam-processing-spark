@@ -35,7 +35,7 @@ public class ForensicAnalysisHDFS {
 		// Execute jobs
 		// AnalysisJobs.retrieveFileMetadata(executionContext, dataDir, outputDir +
 		// "/metadata");
-		AnalysisJobs.findDuplicateFiles(executionContext, dataDir, outputDir + "/duplicatefiles");
+		AnalysisJobs.findDuplicateFilesOnHDFSFolder(executionContext, dataDir, outputDir + "/duplicatefiles");
 		executionContext.stop();
 	}
 
