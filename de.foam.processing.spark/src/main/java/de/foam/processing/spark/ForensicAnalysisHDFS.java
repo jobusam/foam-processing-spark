@@ -3,9 +3,15 @@ package de.foam.processing.spark;
 import java.nio.file.Paths;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import de.foam.processing.spark.common.FileOutput;
+import de.foam.processing.spark.common.FindDuplicates;
+import de.foam.processing.spark.hashing.Hashing;
+import de.foam.processing.spark.metadata.FileMetadata;
 
 /**
  * The {@link ForensicAnalysisHDFS} Application creates the environment for
@@ -33,10 +39,42 @@ public class ForensicAnalysisHDFS {
 		JavaSparkContext executionContext = createExecutionContext();
 
 		// Execute jobs
-		// AnalysisJobs.retrieveFileMetadata(executionContext, dataDir, outputDir +
-		// "/metadata");
-		AnalysisJobs.findDuplicateFilesOnHDFSFolder(executionContext, dataDir, outputDir + "/duplicatefiles");
+		retrieveFileMetadata(executionContext, dataDir, outputDir + "/metadata");
+		findDuplicateFilesOnHDFSFolder(executionContext, dataDir, outputDir + "/duplicatefiles");
 		executionContext.stop();
+	}
+
+	/**
+	 * Find duplicate files dependent on their hashsum and persist the result as
+	 * text file in readable format.
+	 * 
+	 * @deprecated use {@link FindDuplicates} instead
+	 * @param executionContext
+	 */
+	static void findDuplicateFilesOnHDFSFolder(JavaSparkContext executionContext, String dataDir, String outputDir) {
+		JavaPairRDD<String, String> hashesWithFileNames = executionContext.binaryFiles(dataDir)
+				.mapValues(Hashing::hashFiles) // -
+				.mapValues(Hashing::mapToHexString);
+		JavaPairRDD<String, String> results = FindDuplicates.filterForDuplicates(hashesWithFileNames);
+		// printResults(results);
+		FileOutput.saveResults(results, outputDir);
+	}
+
+	/**
+	 * Retrieve all available Metadata of HDFS files and write them into a text file
+	 * 
+	 * @param executionContext
+	 * @deprecated the file metadata is already persisted in HBASE now. This method
+	 *             tries to get the metadata only from hdfs files.
+	 */
+	@Deprecated
+	static void retrieveFileMetadata(JavaSparkContext executionContext, String dataDir, String outputDir) {
+		try {
+			FileMetadata.extractFileMetadata(executionContext, dataDir, outputDir);
+		} catch (Exception e) {
+			LOGGER.error("Retrieving Metadata of files in input directory {} failed!", dataDir, e);
+		}
+
 	}
 
 	/**

@@ -22,7 +22,8 @@
 					<target>1.8</target>
 				</configuration>
 			</plugin>
-			<plugin>
+			<!--Temporary disable fat jar plugin -->
+ 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<version>3.1.0</version>
@@ -41,7 +42,6 @@
 					</execution>
 				</executions>
 			</plugin>
-
 		</plugins>
 	</build>
 
@@ -65,6 +65,12 @@
 			<groupId>org.apache.hbase</groupId>
 			<artifactId>hbase-spark</artifactId>
 			<version>3.0.0-SNAPSHOT</version>
+		</dependency>
+		<!-- Detect MIME-Types with Apache Tika -->
+		<dependency>
+			<groupId>org.apache.tika</groupId>
+			<artifactId>tika-core</artifactId>
+			<version>1.18</version>
 		</dependency>
 	</dependencies>
 

@@ -62,6 +62,7 @@ public class HbaseConnector {
 	private static final byte[] C_LAST_ACCESSED = Bytes.toBytes("lastAccessed");
 	private static final byte[] C_CREATED = Bytes.toBytes("created");
 	private static final byte[] C_FILE_HASH = Bytes.toBytes("fileHash");
+	private static final byte[] C_MEDIA_TYPE = Bytes.toBytes("mediaType");
 
 	// cf content and including columns
 	private static final byte[] CF_CONTENT = Bytes.toBytes("content");
@@ -178,6 +179,28 @@ public class HbaseConnector {
 	}
 
 	/**
+	 * Same method like {@link #getSmallFileContent()} but will additionally request
+	 * the file path of the entry.
+	 * 
+	 * @return {@link JavaPairRDD}<br>
+	 *         val_1 = contains the row ID of the HBASE entry<br>
+	 *         val_2 = {@link Tuple2}<br>
+	 *         ------ val_1 = file path ("metadata:relativeFilePath")<br>
+	 *         ------ val_2 = file content of small files as {@link ByteBuffer}.
+	 */
+	public JavaPairRDD<String, Tuple2<String, ByteBuffer>> getSmallFileContentWithPath() {
+		// request only files that are persisted in hbase (hdfsFilePath != null)
+		Scan scans = new Scan().addColumn(CF_CONTENT, C_FILE_CONTENT).addColumn(CF_METADATA, C_FILE_PATH)
+				.setFilter(valueIsNotNull(CF_CONTENT, C_FILE_CONTENT));
+
+		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
+			return new Tuple2<String, Tuple2<String, ByteBuffer>>(Bytes.toString(result.getRow()),
+					new Tuple2<String, ByteBuffer>(Bytes.toString(result.getValue(CF_METADATA, C_FILE_PATH)),
+							result.getValueAsByteBuffer(CF_CONTENT, C_FILE_CONTENT)));
+		}).mapToPair(t -> t);
+	}
+
+	/**
 	 * Following method is useless! Because it's not possible to access the file
 	 * content of a given file path within any executor without using the spark
 	 * context!
@@ -201,6 +224,28 @@ public class HbaseConnector {
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
 			return new Tuple2<String, org.apache.hadoop.fs.Path>(Bytes.toString(result.getRow()),
 					new org.apache.hadoop.fs.Path(Bytes.toString(result.getValue(CF_CONTENT, C_HDFS_FILE_PATH))));
+		}).mapToPair(t -> t);
+	}
+
+	/**
+	 * Request all original file paths of large files only! The difference between a
+	 * large and a small file is that the large file content itself is persisted in
+	 * HDFS. Therefore a large file entry in HBASE additionally have a column
+	 * "content:hdfsFilePath". This method retrieves all original file paths
+	 * ("metadata:relativeFilePath") of large files.
+	 * 
+	 * @return {@link JavaPairRDD}<br>
+	 *         val_1 = contains the row ID of the HBASE entry<br>
+	 *         val_2 = original file path.
+	 */
+	public JavaPairRDD<String, String> getOriginalFilePathOfLargeFiles() {
+		// request only files that are persisted in hbase (hdfsFilePath != null)
+		Scan scans = new Scan().addColumn(CF_METADATA, C_FILE_PATH)
+				.setFilter(valueIsNotNullExclusive(CF_CONTENT, C_HDFS_FILE_PATH));
+
+		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
+			return new Tuple2<String, String>(Bytes.toString(result.getRow()),
+					Bytes.toString(result.getValue(CF_METADATA, C_FILE_PATH)));
 		}).mapToPair(t -> t);
 	}
 
@@ -230,6 +275,25 @@ public class HbaseConnector {
 	}
 
 	/**
+	 * Get Media Types from HBASE. Use table "forensicMetadata" and column
+	 * "metadata:mediaType"
+	 * 
+	 * @return {@link JavaPairRDD}<br>
+	 *         val_1 = contains the row ID of the HBASE entry<br>
+	 *         val_2 = mediaType
+	 */
+	public JavaPairRDD<String, String> getMediaTypes() {
+		// request only files that are persisted in hbase (hdfsFilePath != null)
+		Scan scans = new Scan().addColumn(CF_METADATA, C_MEDIA_TYPE)
+				.setFilter(valueIsNotNull(CF_METADATA, C_MEDIA_TYPE));
+
+		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
+			return new Tuple2<String, String>(Bytes.toString(result.getRow()),
+					Bytes.toString(result.getValue(CF_METADATA, C_MEDIA_TYPE)));
+		}).mapToPair(t -> t);
+	}
+
+	/**
 	 * Write file hashes to HBASE. Put the values into table "forensicMetadata" and
 	 * column "metadata:fileHash"
 	 * 
@@ -239,8 +303,23 @@ public class HbaseConnector {
 	 *            val_2 = file hash.
 	 */
 	public void putHashesToHbase(JavaPairRDD<String, byte[]> fileHashes) {
-		hbaseContext.bulkPut(JavaPairRDD.toRDD(fileHashes).toJavaRDD(), HBASE_FORENSIC_TABLE, (fileHash) -> {
-			return new Put(Bytes.toBytes(fileHash._1)).addColumn(CF_METADATA, C_FILE_HASH, fileHash._2);
+		hbaseContext.bulkPut(JavaPairRDD.toRDD(fileHashes).toJavaRDD(), HBASE_FORENSIC_TABLE, (entry) -> {
+			return new Put(Bytes.toBytes(entry._1())).addColumn(CF_METADATA, C_FILE_HASH, entry._2());
+		});
+	}
+
+	/**
+	 * Write file media types to HBASE. Put the values into table "forensicMetadata"
+	 * and column "metadata:mediaType"
+	 * 
+	 * @param {@link
+	 * 			JavaPairRDD}<br>
+	 *            val_1 = contains the row ID of the HBASE entry<br>
+	 *            val_2 = mediaType
+	 */
+	public void putMediaTypesToHbase(JavaPairRDD<String, String> fileMediaTypes) {
+		hbaseContext.bulkPut(JavaPairRDD.toRDD(fileMediaTypes).toJavaRDD(), HBASE_FORENSIC_TABLE, (entry) -> {
+			return new Put(Bytes.toBytes(entry._1())).addColumn(CF_METADATA, C_MEDIA_TYPE, Bytes.toBytes(entry._2()));
 		});
 	}
 
@@ -251,6 +330,21 @@ public class HbaseConnector {
 	private static SingleColumnValueFilter valueIsNotNull(byte[] family, byte[] qualifier) {
 		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
 		SingleColumnValueFilter filter = new SingleColumnValueFilter(family, qualifier, // -
+				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
+				Bytes.toBytes(""));
+		// Otherwise rows without the specified column will emitted!
+		filter.setFilterIfMissing(true);
+		return filter;
+	}
+
+	/**
+	 * Create a filter object that skips the whole row, if the specified column
+	 * value is empty. Additionally this column will also excluded if the value is
+	 * available! See {@link SingleColumnValueExcludeFilter}!
+	 */
+	private static SingleColumnValueFilter valueIsNotNullExclusive(byte[] family, byte[] qualifier) {
+		// For HDP 2.6.3 and HBASE 1.1.2 following constructor is correct.
+		SingleColumnValueExcludeFilter filter = new SingleColumnValueExcludeFilter(family, qualifier, // -
 				CompareFilter.CompareOp.NOT_EQUAL, // for HBASE 2.0.0 and later CompareOperator.NOT_EQUAL is preferred!
 				Bytes.toBytes(""));
 		// Otherwise rows without the specified column will emitted!

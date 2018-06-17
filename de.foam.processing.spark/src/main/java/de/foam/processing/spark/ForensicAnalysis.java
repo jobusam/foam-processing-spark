@@ -15,9 +15,11 @@ import de.foam.processing.spark.hbase.HbaseConnector;
 /**
  * The {@link ForensicAnalysis} class reads data from HBASE and prints some
  * results.<br>
- * TODO: Implement calculation of file content hashes (almost done!)<br>
- * TODO: Determine duplicate files<br>
- * TODO: Analyse File Mime-Type of files<br>
+ * Following functionality is implemented:<br>
+ * - Calculate file hashes and persist it <br>
+ * - Detect Media-Type of files and persist it<br>
+ * - Determine duplicate files (output in log file)<br>
+ * --- TODO: How to save the results?<br>
  * TODO: Extract strings from file content for full text search / indexing<br>
  * <br>
  * The data model in HBASE is derived from foam-data-import project.<br>
@@ -30,15 +32,24 @@ import de.foam.processing.spark.hbase.HbaseConnector;
 final public class ForensicAnalysis {
 	private static final Logger LOGGER = LoggerFactory.getLogger(ForensicAnalysis.class);
 
+	// FIXME: Make directory configurable!
+	private static final String LARGE_FILES_HDFS_PATH = "/data/";
+
 	public static void main(String[] args) {
 		Optional<Path> hbaseConfigFile = validateInputParams(args);
 		SparkConf sparkConf = new SparkConf().setAppName("ForensicAnalysis");
 		JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 		try {
 			HbaseConnector hbc = new HbaseConnector(jsc, hbaseConfigFile);
-			// FIXME: Make directory configurable!
-			AnalysisJobs.calculateHashsums(jsc, hbc, "/data/");
-			AnalysisJobs.findDuplicateFiles(jsc, hbc);
+
+			AnalysisJobs.calculateHashsums(jsc, hbc, LARGE_FILES_HDFS_PATH);
+			// AnalysisJobs.findDuplicateFiles(jsc, hbc); // requires file hashes in hbase
+
+			AnalysisJobs.detectFileMediaType(jsc, hbc, LARGE_FILES_HDFS_PATH);
+			// AnalysisJobs.printMediaTypesAndAmount(hbc);// requires media types in hbase
+
+			// Only for testing purpose!
+			// AnalysisJobs.printDifferentMediaTypes(jsc, hbc, LARGE_FILES_HDFS_PATH);
 		} finally {
 			jsc.stop();
 		}
