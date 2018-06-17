@@ -3,13 +3,15 @@ This project contains forensic applications for analysis with Apache Spark.
 
 ## Current functionality
 Following functionality is implemented:
-* Read data from HBASE and HDFS. Use project [foam-data-import](https://github.com/jobusam/foam-data-import) 
-to import data into Hadoop Cluster.
+* Read data from HBASE and HDFS.
+  * Use project [foam-data-import](https://github.com/jobusam/foam-data-import) to import data into Hadoop Cluster.
+* Calculate file hashes and persist the result in HBASE.
+* Find duplicate files and print results into log file.
+* Detect file media types (like JPEG-Image, MPEG-Video, WORD-Document,...) based on Apache Tika and persist results in HBASE.
 
 ## Future functionality
-* Calculate file hashes and find duplicate files
-* Determine file MIME types (like JPEG-Image, MPEG-Video, WORD-Document,...)
 * Extract strings from file content and create an index for keyword search
+* Implement a solution to display file duplicates and search for specific media types
 
 ## Build Forensic App
 Checkout the Maven Project written in Java ([de.foam.processing.spark](de.foam.processing.spark)).
