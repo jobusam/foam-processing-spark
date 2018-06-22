@@ -27,7 +27,7 @@ Build the app for Hortonworks HDP 2.6.3 (Hadoop + Spark + HBASE).
 Build it with Maven and create a fat JAR file (required bundles included):
 ```
 cd de.foam.processing.spark
-mvn clean package - P buildForHDP2.6.3
+mvn clean package -P buildForHDP2.6.3
 ```
 Resulting JAR-File: target/processing.spark-0.0.2-SNAPSHOT-jar-with-dependencies.jar
 
