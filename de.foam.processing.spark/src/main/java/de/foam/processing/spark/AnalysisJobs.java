@@ -95,6 +95,18 @@ public class AnalysisJobs {
 	}
 
 	/**
+	 * Put HBASE content into Solr? TODO: Implement ME
+	 * 
+	 * @param executionContext
+	 * @param hbc
+	 */
+	static void indexHbaseContentWithSolr(JavaSparkContext executionContext, HbaseConnector hbc) {
+		LOGGER.info("Put HBASE data into solr:");
+		hbc.getForensicMetadata();
+
+	}
+
+	/**
 	 * * Only for testing purpose! The collect() method can lead to out of memory
 	 * exception in driver<br>
 	 * Print all available Media Types and the amount of files belonging to them!
@@ -105,8 +117,9 @@ public class AnalysisJobs {
 	public static void printMediaTypesAndAmount(HbaseConnector hbc) {
 		hbc.getMediaTypes()
 				.mapToPair((Tuple2<String, String> rowAndMediaType) -> new Tuple2<String, Long>(rowAndMediaType._2, 1L))//
-				.reduceByKey((Long c1, Long c2) -> c1 + c2).collect()
-				.forEach(e -> LOGGER.info("Media Type = {} ; Occurences = {}", e._1, e._2));
+				.reduceByKey((Long c1, Long c2) -> c1 + c2) // -
+				.mapToPair(t -> new Tuple2<>(t._2, t._1)).sortByKey(false) // - flip for sort!
+				.collect().forEach(e -> LOGGER.info("Media Type = {} ; Occurences = {}", e._2, e._1));
 	}
 
 	/**

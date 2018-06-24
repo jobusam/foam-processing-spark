@@ -33,10 +33,15 @@ final public class ForensicAnalysis {
 	private static final Logger LOGGER = LoggerFactory.getLogger(ForensicAnalysis.class);
 
 	// FIXME: Make directory configurable!
-	private static final String LARGE_FILES_HDFS_PATH = "/data/";
+	private String LARGE_FILES_HDFS_PATH = "/data/";
+	Optional<Path> hbaseConfigFile = Optional.empty();
 
 	public static void main(String[] args) {
-		Optional<Path> hbaseConfigFile = validateInputParams(args);
+		new ForensicAnalysis().analyzeData(args);
+	}
+
+	void analyzeData(String[] args) {
+		validateInputParams(args);
 		SparkConf sparkConf = new SparkConf().setAppName("ForensicAnalysis");
 		JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 		try {
@@ -49,6 +54,7 @@ final public class ForensicAnalysis {
 			// AnalysisJobs.printMediaTypesAndAmount(hbc);// requires media types in hbase
 
 			// Only for testing purpose!
+			// AnalysisJobs.indexHbaseContentWithSolr(jsc, hbc);
 			// AnalysisJobs.printDifferentMediaTypes(jsc, hbc, LARGE_FILES_HDFS_PATH);
 		} finally {
 			jsc.stop();
@@ -86,23 +92,31 @@ final public class ForensicAnalysis {
 
 	/**
 	 * Check if input parameters are set. It's possible to set the path to
-	 * hbase-site.xml, because this configuration defines how to access HBASE!
-	 * 
-	 * @param args
+	 * hbase-site.xml, because this configuration defines how to access HBASE!<br>
+	 * The second parameter is the hdfs file path, where large files are persisted.
+	 * <br>
 	 */
-	private static Optional<Path> validateInputParams(String[] args) {
+	private void validateInputParams(String[] args) {
 		if (args.length >= 1 && args[0] != null && Paths.get(args[0]) != null) {
 			Path path = Paths.get(args[0]);
 			if (path != null && path.toFile().exists()) {
 				LOGGER.info("Use file {} as hbase-site.xml file to connect to HBASE", path);
-				return Optional.of(path);
+				hbaseConfigFile = Optional.of(path);
+			} else {
+				LOGGER.error("The given parameter {} is no valid file path to hbase-site.xml configuration file",
+						args[0]);
 			}
-			LOGGER.error("The given parameter {} is no valid file path to hbase-site.xml configuration file", args[0]);
+		} else {
+			LOGGER.info("Usage example: ForensicAnalysis [path_to_hbase-site.xml] [hdfs_path_to_large_data_files]\n"
+					+ "If no parameter is given default values will be set to access hbase.");
 		}
-		LOGGER.info(
-				"No parameter set for hbase-site.xml path. Use default configuration for localhost to connect to HBASE.\n"
-						+ "Usage example: ForensicAnalysis <path_to_hbase-site.xml> (Optional)");
-		return Optional.empty();
+
+		if (args.length >= 2 && args[1] != null && Paths.get(args[1]) != null) {
+			LARGE_FILES_HDFS_PATH = args[1];
+		} else {
+			LOGGER.error("The given parameter {} is no valid file path to hbase-site.xml configuration file", args[1]);
+		}
+		LOGGER.info("HDFS Large File Directory is {}", args[1]);
 	}
 
 }

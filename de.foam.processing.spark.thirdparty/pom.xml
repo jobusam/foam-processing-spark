@@ -4,12 +4,12 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>de.foam</groupId>
-	<artifactId>processing.spark</artifactId>
+	<artifactId>processing.spark-thirdparty</artifactId>
 	<version>0.0.2-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
-	<name>de.foam.processing.spark</name>
-	<description>A collection of forensic analysis applications that can be executed with apache spark</description>
+	<name>de.foam.processing.spark-thirdparty</name>
+	<description>Thirdparty maven projects rebundled for execution with de.foam.processing.spark artifact</description>
 	<url>https://github.com/jobusam/foam-processing-spark</url>
 
 	<build>

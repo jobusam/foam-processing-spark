@@ -6,7 +6,7 @@
 # Work: Masterthesis
 
 #Application params
-SPARK_APP_LOCATION="/home/johannes/git/foam-processing-spark/de.foam.processing.spark/target/processing.spark-0.0.2-SNAPSHOT-jar-with-dependencies.jar"
+SPARK_APP_LOCATION="/home/johannes/git/foam-processing-spark/de.foam.processing.spark/target/processing.spark-0.0.2-SNAPSHOT.jar"
 SPARK_APP_MAIN_CLASS="de.foam.processing.spark.ForensicAnalysis"
 
 #The connectionParameter script contains following parameters for remote cluster.

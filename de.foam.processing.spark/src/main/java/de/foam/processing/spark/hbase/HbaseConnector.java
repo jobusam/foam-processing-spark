@@ -40,6 +40,10 @@ import scala.Tuple3;
  * 
  */
 public class HbaseConnector {
+	private static final String HBASE_ZOOKEEPER_PROPERTY_CLIENT_PORT = "hbase.zookeeper.property.clientPort";
+
+	private static final String HBASE_ZOOKEEPER_QUORUM = "hbase.zookeeper.quorum";
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(HbaseConnector.class);
 
 	// local Standalone config to access hbase
@@ -85,12 +89,15 @@ public class HbaseConnector {
 			LOGGER.info("Use configuration file {} to connect to HBASE", hbaseConfigFile.get());
 			conf.addResource(new org.apache.hadoop.fs.Path(hbaseConfigFile.get().toString()));
 		} else {
-			LOGGER.info("Use default configuration to connect to HBASE: <hbase.zookeeper.quorum = {}>, "
-					+ "<hbase.zookeeper.property.clientPort = {}>", HBASE_STANDALONE_HOST, HBASE_PORT);
+			LOGGER.info("Use default configuration to connect to HBASE");
 			// this works only for HBASE Standalone
-			conf.set("hbase.zookeeper.quorum", HBASE_STANDALONE_HOST);
-			conf.set("hbase.zookeeper.property.clientPort", HBASE_PORT);
+			conf.set(HBASE_ZOOKEEPER_QUORUM, HBASE_STANDALONE_HOST);
+			conf.set(HBASE_ZOOKEEPER_PROPERTY_CLIENT_PORT, HBASE_PORT);
+			// conf.set("hbase.client.nonces.enabled", "false");
 		}
+		LOGGER.info("Connection: <{} = {}>, <{} = {}>", // -
+				HBASE_ZOOKEEPER_QUORUM, conf.get(HBASE_ZOOKEEPER_QUORUM), // -
+				HBASE_ZOOKEEPER_PROPERTY_CLIENT_PORT, conf.get(HBASE_ZOOKEEPER_PROPERTY_CLIENT_PORT));
 		hbaseContext = new JavaHBaseContext(jsc, conf);
 	}
 
