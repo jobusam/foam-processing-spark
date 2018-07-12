@@ -22,7 +22,6 @@ import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import de.foam.processing.spark.hashing.Hashing;
 import scala.Tuple2;
 import scala.Tuple3;
 
@@ -247,7 +246,7 @@ public class HbaseConnector {
 	 */
 	public JavaPairRDD<String, String> getOriginalFilePathOfLargeFiles() {
 		// request only files that are persisted in hbase (hdfsFilePath != null)
-		Scan scans = new Scan().addColumn(CF_METADATA, C_FILE_PATH)
+		Scan scans = new Scan().addColumn(CF_METADATA, C_FILE_PATH).addColumn(CF_CONTENT, C_HDFS_FILE_PATH)
 				.setFilter(valueIsNotNullExclusive(CF_CONTENT, C_HDFS_FILE_PATH));
 
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
@@ -270,14 +269,14 @@ public class HbaseConnector {
 	 */
 	public JavaRDD<Tuple3<String, String, String>> getFileHashAndPath() {
 		// request only files that have any hash value
-		Scan scans = new Scan().addFamily(CF_METADATA)
-				// .addColumn(CF_METADATA, C_FILE_PATH).addColumn(CF_METADATA, C_FILE_HASH)
+		Scan scans = new Scan()// .addFamily(CF_METADATA)
+				.addColumn(CF_METADATA, C_FILE_PATH).addColumn(CF_METADATA, C_FILE_HASH)
 				.setFilter(valueIsNotNull(CF_METADATA, C_FILE_HASH));
 
 		return hbaseContext.hbaseRDD(HBASE_FORENSIC_TABLE, scans, r -> r._2).map(result -> {
 			return new Tuple3<String, String, String>(Bytes.toString(result.getRow()),
 					Bytes.toString(result.getValue(CF_METADATA, C_FILE_PATH)),
-					Hashing.mapToHexString(result.getValue(CF_METADATA, C_FILE_HASH)));
+					Bytes.toString(result.getValue(CF_METADATA, C_FILE_HASH)));
 		});
 	}
 
@@ -302,16 +301,17 @@ public class HbaseConnector {
 
 	/**
 	 * Write file hashes to HBASE. Put the values into table "forensicMetadata" and
-	 * column "metadata:fileHash"
+	 * column "metadata:fileHash". Write file hashes as String into HBASE because
+	 * the values will be indexed in SOLR and can be better requested as Hex-String.
 	 * 
 	 * @param {@link
 	 * 			JavaPairRDD}<br>
 	 *            val_1 = contains the row ID of the HBASE entry<br>
 	 *            val_2 = file hash.
 	 */
-	public void putHashesToHbase(JavaPairRDD<String, byte[]> fileHashes) {
+	public void putHashesToHbase(JavaPairRDD<String, String> fileHashes) {
 		hbaseContext.bulkPut(JavaPairRDD.toRDD(fileHashes).toJavaRDD(), HBASE_FORENSIC_TABLE, (entry) -> {
-			return new Put(Bytes.toBytes(entry._1())).addColumn(CF_METADATA, C_FILE_HASH, entry._2());
+			return new Put(Bytes.toBytes(entry._1())).addColumn(CF_METADATA, C_FILE_HASH, Bytes.toBytes(entry._2()));
 		});
 	}
 

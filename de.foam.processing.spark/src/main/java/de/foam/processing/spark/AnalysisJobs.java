@@ -39,14 +39,14 @@ public class AnalysisJobs {
 	 */
 	static void calculateHashsums(JavaSparkContext jsc, HbaseConnector hbc, String largeDataHdfsDir) {
 		LOGGER.info("Calculate file hashes and write them into HBASE");
-		JavaPairRDD<String, byte[]> smallFileHashes = hbc.getSmallFileContent() // -
-				.mapValues(Hashing::hashFiles);
+		JavaPairRDD<String, String> smallFileHashes = hbc.getSmallFileContent() // -
+				.mapValues(Hashing::hashFiles).mapValues(Hashing::mapToHexString);
 		// .mapValues(Hashing::mapToHexString)
 		// .take(5).forEach(h -> LOGGER.info("Small File {} hash = {}", h._1, h._2));
 		hbc.putHashesToHbase(smallFileHashes);
 
-		JavaPairRDD<String, byte[]> largeFileHashes = getLargeFileContent(jsc, largeDataHdfsDir)
-				.mapValues(Hashing::hashFiles);
+		JavaPairRDD<String, String> largeFileHashes = getLargeFileContent(jsc, largeDataHdfsDir)
+				.mapValues(Hashing::hashFiles).mapValues(Hashing::mapToHexString);
 		// .mapValues(Hashing::mapToHexString)
 		// .take(5).forEach(h -> LOGGER.info("Large File {} hash = {}", h._1, h._2));
 		hbc.putHashesToHbase(largeFileHashes);
@@ -92,18 +92,6 @@ public class AnalysisJobs {
 		// Results can be checked with hbase shell command
 		// $ scan 'forensicData', {COLUMNS =>
 		// ['metadata:relativeFilePath','metadata:mediaType']}
-	}
-
-	/**
-	 * Put HBASE content into Solr? TODO: Implement ME
-	 * 
-	 * @param executionContext
-	 * @param hbc
-	 */
-	static void indexHbaseContentWithSolr(JavaSparkContext executionContext, HbaseConnector hbc) {
-		LOGGER.info("Put HBASE data into solr:");
-		hbc.getForensicMetadata();
-
 	}
 
 	/**

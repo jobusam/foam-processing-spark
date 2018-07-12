@@ -32,8 +32,7 @@ import de.foam.processing.spark.hbase.HbaseConnector;
 final public class ForensicAnalysis {
 	private static final Logger LOGGER = LoggerFactory.getLogger(ForensicAnalysis.class);
 
-	// FIXME: Make directory configurable!
-	private String LARGE_FILES_HDFS_PATH = "/data/";
+	private String largeFilesHdfsPath = "/data/";
 	Optional<Path> hbaseConfigFile = Optional.empty();
 
 	public static void main(String[] args) {
@@ -47,15 +46,14 @@ final public class ForensicAnalysis {
 		try {
 			HbaseConnector hbc = new HbaseConnector(jsc, hbaseConfigFile);
 
-			AnalysisJobs.calculateHashsums(jsc, hbc, LARGE_FILES_HDFS_PATH);
+			AnalysisJobs.calculateHashsums(jsc, hbc, largeFilesHdfsPath);
 			// AnalysisJobs.findDuplicateFiles(jsc, hbc); // requires file hashes in hbase
 
-			AnalysisJobs.detectFileMediaType(jsc, hbc, LARGE_FILES_HDFS_PATH);
+			AnalysisJobs.detectFileMediaType(jsc, hbc, largeFilesHdfsPath);
 			// AnalysisJobs.printMediaTypesAndAmount(hbc);// requires media types in hbase
 
 			// Only for testing purpose!
-			// AnalysisJobs.indexHbaseContentWithSolr(jsc, hbc);
-			// AnalysisJobs.printDifferentMediaTypes(jsc, hbc, LARGE_FILES_HDFS_PATH);
+			// AnalysisJobs.printDifferentMediaTypes(jsc, hbc, largeFilesHdfsPath);
 		} finally {
 			jsc.stop();
 		}
@@ -112,11 +110,14 @@ final public class ForensicAnalysis {
 		}
 
 		if (args.length >= 2 && args[1] != null && Paths.get(args[1]) != null) {
-			LARGE_FILES_HDFS_PATH = args[1];
+			largeFilesHdfsPath = args[1];
+			LOGGER.info("HDFS Large File Directory is {}", args[1]);
 		} else {
-			LOGGER.error("The given parameter {} is no valid file path to hbase-site.xml configuration file", args[1]);
+			LOGGER.error("There is no valid hdfs file path to large file directry in hdfs given. Use default one {}",
+					largeFilesHdfsPath);
+			// LOGGER.error("The given parameter {} is no valid file path to hbase-site.xml
+			// configuration file", args[1]);
 		}
-		LOGGER.info("HDFS Large File Directory is {}", args[1]);
 	}
 
 }
