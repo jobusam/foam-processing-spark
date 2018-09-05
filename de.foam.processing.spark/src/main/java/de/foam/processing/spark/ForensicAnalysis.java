@@ -43,6 +43,11 @@ final public class ForensicAnalysis {
 		validateInputParams(args);
 		SparkConf sparkConf = new SparkConf().setAppName("ForensicAnalysis");
 		JavaSparkContext jsc = new JavaSparkContext(sparkConf);
+		// retrieve files recursively. If this configuration is set to false it would
+		// throw NullPointerExceptions,
+		// if the given input directory contains sub directories
+		jsc.hadoopConfiguration().set("mapreduce.input.fileinputformat.input.dir.recursive", "true");
+
 		try {
 			HbaseConnector hbc = new HbaseConnector(jsc, hbaseConfigFile);
 

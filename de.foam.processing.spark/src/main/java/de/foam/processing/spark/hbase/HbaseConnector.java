@@ -54,7 +54,7 @@ public class HbaseConnector {
 
 	// cf metadata and including columns
 	private static final byte[] CF_METADATA = Bytes.toBytes("metadata");
-	private static final byte[] C_FILE_PATH = Bytes.toBytes("relativeFilePath");
+	private static final byte[] C_FILE_PATH = Bytes.toBytes("filePath");
 	private static final byte[] C_FILE_TYPE = Bytes.toBytes("fileType");
 	private static final byte[] C_FILE_SIZE = Bytes.toBytes("fileSize");
 	private static final byte[] C_OWNER = Bytes.toBytes("owner");

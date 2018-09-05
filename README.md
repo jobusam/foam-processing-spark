@@ -51,13 +51,15 @@ git clone https://github.com/apache/hbase.git
 # 2) OPTIONAL: clear  local maven repository
 rm -r ~/.m2/repository
 
-# 3) Build HBASE and intall maven artifacts into local repository
+# 3) Build HBASE and install maven artifacts into local repository
 # -- build HBASE against Hadoop version 3.1.0
 mvn clean install assembly:single -DskipTests=true -Dhadoop.profile=3.0 -Dhadoop-three.version=3.1.0
 # The HBASE single tarball is located ./hbase-assembly/target directory.
 # The tarball can be used to start an HBASE Standalone instance 
 ```
-Now build the app against the latest HBASE Maven artifacts
+Now build the app against the latest HBASE Maven artifacts. 
+Sometimes i run into trouble when maven wants to download some unavailable artifacts from apache snapshot repository.
+Therefore it could help to comment out the apache plugin repository in the hbase root pom file (hbase/pom.xml).
 ```
 cd de.foam.processing.spark
 mvn clean package 
