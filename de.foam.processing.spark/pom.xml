@@ -22,25 +22,6 @@
 					<target>1.8</target>
 				</configuration>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<version>3.1.0</version>
-				<configuration>
-					<descriptorRefs>
-						<descriptorRef>jar-with-dependencies</descriptorRef>
-					</descriptorRefs>
-
-				</configuration>
-				<executions>
-					<execution>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
 		</plugins>
 	</build>
 
@@ -59,7 +40,7 @@
 		</dependency>
 		<!-- Following dependency is used to access HBASE. This artifact is no 
 			located in maven central repository and must be build from hbase source code 
-			repository -->
+			repository (checkout github.com/apache/hbase repo and run $ mvn clean package -DskipTests)-->
 		<dependency>
 			<groupId>org.apache.hbase</groupId>
 			<artifactId>hbase-spark</artifactId>
